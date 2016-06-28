@@ -1,16 +1,15 @@
 # sshfsmount
 
-OSXで簡単にsshfsでマウントするスクリプト
+sshfsで素早くマウントするためのツール。OSX用
 
 # 準備
 
 [Homebrew Cask](https://caskroom.github.io/) で osxfuseとsshfsを導入
 
-	brew tap caskroom/cask
-	brew cask install osxfuse
-	brew cask install sshfs
-
-	sshfs -V
+	$ brew tap caskroom/cask
+	$ brew cask install osxfuse
+	$ brew cask install sshfs
+	$ shshfs -V
 
 エラーがでないことを確認する
 
@@ -21,5 +20,5 @@ sshfsmountをパスの通った適当なところにコピーして実行権限�
 
 # 使う
 
-	sshfsmount username@host
+	$ sshfsmount username@host
 
