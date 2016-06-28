@@ -1,0 +1,113 @@
+#!/usr/bin/perl
+# ゑ
+package main;
+use strict;
+use warnings;
+use utf8;
+binmode(STDIN, ':utf8');
+binmode(STDOUT,':utf8');
+binmode(STDERR,':utf8');
+
+use Getopt::Std;
+$Getopt::Std::STANDARD_HELP_VERSION=1;
+
+our $VERSION='0.05';
+
+my %proxycommand=(
+	'1' => 'ssh username@host nc %h %p',
+);
+
+my %opts;
+getopts('rejc:v:p:x:',\%opts);
+
+&error unless $ARGV[0];
+
+my ($user,$host,$dir)=('','','');
+if($ARGV[0]=~/^([^@]+)@([^@\:]+):?([^@\:]+)?$/) {
+	($user,$host,$dir)=($1,$2,$3);
+}
+
+$dir=($user eq 'root') ? '/root':"/home/$user" unless defined $dir;
+
+&error('require username.') unless $user;
+&error('require hostname.') unless $host;
+
+my $volname = defined($opts{v}) ? $opts{v} : "$user\@$host";
+
+{
+	my $mounted=0;
+	my $target=$volname.':'.$dir.' on /Volumes/'.$volname;
+	print "[$target]\n";
+	foreach(split(/\n/,`mount`)) {
+		$mounted=1 if(m#^\Q$target\E#);
+	}
+	if($mounted) {
+		system('diskutil','unmount','force','/Volumes/'.$volname);
+	}
+}
+
+# 参考
+# http://blog.philippklaus.de/2011/07/sshfs-on-mac-os-x-10-6-8-with-fuse4x/
+my @sshfsopt=(
+	"auto_cache",
+	"reconnect",
+	"defer_permissions",
+	"negative_vncache",
+	"noappledouble",
+	'idmap=user',
+	'workaround=nonodelay:rename',
+	"volname=$volname",
+);
+push @sshfsopt,"port=$opts{p}"   if($opts{p});
+push @sshfsopt,"Cipher=$opts{c}" if($opts{c});
+
+push @sshfsopt,'ro' if ($opts{r});
+if($opts{e}) {
+	push @sshfsopt,'modules=iconv';
+	push @sshfsopt,'from_code=euc-jp';
+	push @sshfsopt,'to_code=utf-8';
+}
+
+if($opts{j}) {
+	push @sshfsopt,'modules=iconv';
+	push @sshfsopt,'from_code=cp932';
+	push @sshfsopt,'to_code=utf-8';
+}
+
+my @proxy=();
+if($opts{x}) {
+	foreach my $key( keys %proxycommand ) {
+		if($opts{x} eq $key) {
+			push @proxy,'-o';
+			push @proxy,'ProxyCommand='.$proxycommand{$opts{x}};
+			last;
+		}
+	}
+}
+
+my @cmd=('sshfs','-o',join(',',@sshfsopt),@proxy,"$user\@$host:$dir","/Volumes/$volname");
+
+mkdir "/Volumes/$volname" || die $!;
+print join(' ',@cmd)."\n";
+system @cmd; my $rv=$?>>8;
+system('pf',"/Volumes/$volname") if($rv == 0);
+
+sub error {
+	print "[ERROR] $_[0]\n" if $_[0];
+	&HELP_MESSAGE;
+	exit;
+}
+sub HELP_MESSAGE {
+	print "Usage: $0 [options] user\@host:/dir\n";
+	print "Options:\n";
+   	print " -v set volumename\n";
+	print " -c cipher spec\n";
+	print " -p specific port number\n";
+	print " -e convert encoding euc-jp to utf-8\n";
+	print " -r read only mode\n";
+	foreach my $key( keys %proxycommand ) {
+		print " -x $key ProxyComand: $proxycommand{$key}\n";
+	}
+}
+1;
+
