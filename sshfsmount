@@ -9,16 +9,16 @@ binmode(STDOUT,':utf8');
 binmode(STDERR,':utf8');
 
 use Getopt::Std;
+use File::Path;
+
+my $mountbase="$ENV{HOME}/.sshfsmount";
+our $VERSION='0.06';
+
 $Getopt::Std::STANDARD_HELP_VERSION=1;
-
-our $VERSION='0.05';
-
-my %proxycommand=(
-	'1' => 'ssh username@host nc %h %p',
-);
-
 my %opts;
-getopts('rejc:v:p:x:',\%opts);
+getopts('rejc:v:p:x:s:',\%opts);
+
+if(!-d $mountbase) { mkpath($mountbase) }
 
 &error unless $ARGV[0];
 
@@ -36,13 +36,13 @@ my $volname = defined($opts{v}) ? $opts{v} : "$user\@$host";
 
 {
 	my $mounted=0;
-	my $target=$volname.':'.$dir.' on /Volumes/'.$volname;
+	my $target=$volname.':'.$dir.' on '.$mountbase.'/'.$volname;
 	print "[$target]\n";
 	foreach(split(/\n/,`mount`)) {
 		$mounted=1 if(m#^\Q$target\E#);
 	}
 	if($mounted) {
-		system('diskutil','unmount','force','/Volumes/'.$volname);
+		system('diskutil','unmount','force',$mountbase.'/'.$volname);
 	}
 }
 
@@ -55,7 +55,6 @@ my @sshfsopt=(
 	"negative_vncache",
 	"noappledouble",
 	'idmap=user',
-	'workaround=nonodelay:rename',
 	"volname=$volname",
 );
 push @sshfsopt,"port=$opts{p}"   if($opts{p});
@@ -74,23 +73,20 @@ if($opts{j}) {
 	push @sshfsopt,'to_code=utf-8';
 }
 
-my @proxy=();
-if($opts{x}) {
-	foreach my $key( keys %proxycommand ) {
-		if($opts{x} eq $key) {
-			push @proxy,'-o';
-			push @proxy,'ProxyCommand='.$proxycommand{$opts{x}};
-			last;
-		}
-	}
+if($opts{s}) {
+	push @sshfsopt,"ssh_command=$opts{s}";
 }
 
-my @cmd=('sshfs','-o',join(',',@sshfsopt),@proxy,"$user\@$host:$dir","/Volumes/$volname");
+my @cmd=('sshfs','-o',join(',',@sshfsopt),"$user\@$host:$dir","$mountbase/$volname");
 
-mkdir "/Volumes/$volname" || die $!;
+mkdir "/$mountbase/$volname" || die $!;
 print join(' ',@cmd)."\n";
 system @cmd; my $rv=$?>>8;
-system('pf',"/Volumes/$volname") if($rv == 0);
+exit(1) unless ($rv == 0);
+
+if(-e '/Applications/Path Finder.app') {
+	system('open','-a','Path Finder',"/$mountbase/$volname");
+}
 
 sub error {
 	print "[ERROR] $_[0]\n" if $_[0];
@@ -105,9 +101,7 @@ sub HELP_MESSAGE {
 	print " -p specific port number\n";
 	print " -e convert encoding euc-jp to utf-8\n";
 	print " -r read only mode\n";
-	foreach my $key( keys %proxycommand ) {
-		print " -x $key ProxyComand: $proxycommand{$key}\n";
-	}
+	print " -s ssh command\n";
 }
 1;
 

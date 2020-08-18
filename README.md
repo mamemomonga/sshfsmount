@@ -1,6 +1,6 @@
 # sshfsmount
 
-sshfsで素早くマウントするためのツール。OSX用
+sshfsで素早くマウントするためのツール。macOS用
 
 # 準備
 
